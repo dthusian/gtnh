@@ -37,9 +37,9 @@ KEYMAP = {
   "\"": [e.KEY_LEFTSHIFT, e.KEY_APOSTROPHE],
   
   ".": [e.KEY_DOT],
-  "<": [e.KEY_LEFTSHIFT, e.KEY_DOT],
+  ">": [e.KEY_LEFTSHIFT, e.KEY_DOT],
   ",": [e.KEY_COMMA],
-  ">": [e.KEY_LEFTSHIFT, e.KEY_COMMA],
+  "<": [e.KEY_LEFTSHIFT, e.KEY_COMMA],
   "/": [e.KEY_SLASH],
   "?": [e.KEY_LEFTSHIFT, e.KEY_SLASH],
   

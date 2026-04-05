@@ -1,6 +1,6 @@
 rossi.print("oil cracking controller v0.1")
 
-local BATCH_SIZE = 10000
+local BATCH_SIZE = 5000
 local DELAY = 4
 
 local sides = {
@@ -123,17 +123,20 @@ local crudeCircuitTransposer = {}
 local function initHw()
   for addr, name in component.list("transposer", true) do
     local proxy = component.proxy(addr)
-    if proxy.getTankCount(sides.down) > 0 then
+    local tanks, err = proxy.getTankCount(sides.down)
+    if tanks ~= nil and tanks > 0 then
       table.insert(productTransposers, proxy)
+      rossi.print("occ: found product transposer " .. proxy.address)
     else
       crudeCircuitTransposer = proxy
+      rossi.print("occ: found crude transposer " .. proxy.address)
     end
   end
 end
 
 local function getFluidSafe(transposer, side)
-  local ret, err = pcall(function() return transposer.getFluidInTank(side, 1) end)
-  if err then return {name="", amount=0} else return ret end
+  local success, ret = pcall(function() return transposer.getFluidInTank(side, 1) end)
+  if not success then return {name="", amount=0} else return ret end
 end
 
 local function readFluids()
@@ -161,19 +164,24 @@ local function selectRecipe(fluidAmts)
   local v = vCreate(fluidAmts)
   local deficitVec = vSub(v, targetVec)
   local bestScore = vDist(deficitVec)
+  rossi.print("occ: do nothing = " .. bestScore)
   local bestScoringRecipe = nil
   for _, recipeDef in ipairs(recipes) do
     local recipe = recipeDef[1]
     local recipeVec = recipeDef[2]
-    if fluidAmts[recipe[1]] < BATCH_SIZE then
+    if fluidAmts[recipe[1]] > BATCH_SIZE then
       local afterRecipeVec = vAdd(deficitVec, vScale(recipeVec, BATCH_SIZE / 1000))
       local score = vDist(afterRecipeVec)
+      rossi.print("occ: " .. recipe[1] .. recipe[2] .. " = " .. score)
       if score < bestScore then
         bestScoringRecipe = recipe
         bestScore = score
       end
+    else
+      rossi.print("occ: " recipe[1] .. recipe[2] .. " missing")
     end
   end
+  rossi.print("occ: " .. recipe[1] .. recipe[2])
   return bestScoringRecipe
 end
 
@@ -204,14 +212,10 @@ local function cleanupRecipe(recipe)
   if not success then rossi.print("occ: err: " .. err) end
 end
 
-local function checkForClogs()
---  if crudeCircuitTransposer.getFluidInTank(sides.ea)
-end
-
 local function sleep(s)
-  timeout = computer.uptime + s
-  while computer.uptime < timeout do
-    computer.pullSignal(timeout - computer.uptime)
+  timeout = computer.uptime() + s
+  while computer.uptime() < timeout do
+    computer.pullSignal(timeout - computer.uptime())
   end
 end
 
@@ -223,6 +227,9 @@ local function mainloop()
   end
   while true do
     local fluidAmts = readFluids()
+    for _, k in ipairs(fluids) do
+      rossi.print("occ: " .. k .. " " .. fluidAmts[k])
+    end
     local recipe = selectRecipe(fluidAmts)
     if recipe ~= nil then
       rossi.print("occ: exec " .. recipe[1] .. " " .. recipe[2])
