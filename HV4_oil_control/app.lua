@@ -208,12 +208,14 @@ local function execRecipe(recipe)
 end
 
 local function cleanupRecipe(recipe)
-  success, err = crudeCircuitTransposer.transferItem(sides.down, sides.west, 1, 1, recipe[2])
-  if not success then rossi.print("occ: err: " .. err) end
+  if recipe[2] > 0 then
+    local success, err = crudeCircuitTransposer.transferItem(sides.down, sides.west, 1, 1, recipe[2])
+    if not success then rossi.print("occ: err: " .. err) end
+  end
 end
 
 local function sleep(s)
-  timeout = computer.uptime() + s
+  local timeout = computer.uptime() + s
   while computer.uptime() < timeout do
     computer.pullSignal(timeout - computer.uptime())
   end
@@ -228,7 +230,7 @@ local function mainloop()
   while true do
     local fluidAmts = readFluids()
     for _, k in ipairs(fluids) do
-      rossi.print("occ: " .. k .. " " .. fluidAmts[k])
+      --rossi.print("occ: " .. k .. " " .. fluidAmts[k])
     end
     local recipe = selectRecipe(fluidAmts)
     if recipe ~= nil then

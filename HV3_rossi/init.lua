@@ -18,7 +18,7 @@ do
     gpuProx.bind(screen)
     rossi.print = function(str)
       local w, h = gpuProx.getResolution()
-      for i=1,str.len(),w do
+      for i=1,string.len(str),w do
         gpuProx.copy(1, 2, w, h - 1, 0, -1)
         gpuProx.fill(1, h, w, 1, " ")
         gpuProx.set(1, h, string.sub(str, i, i + w))
@@ -50,6 +50,13 @@ do
     return load(rossi.readfile(path), "=" .. path, "t", _G)
   end
 
+  rossi.sleep = function(s)
+    local timeout = computer.uptime() + s
+    while computer.uptime() < timeout do
+      computer.pullSignal(timeout - computer.uptime())
+    end
+  end
+
   if bootdisk.type ~= "filesystem" then
     rossi.print("rossi: not a filesystem")
     rossi.halt()
@@ -63,10 +70,15 @@ do
 end
 local _, err = xpcall(appFn, debug.traceback)
 if err then
-  rossi.print("rossi: error")
-  for line in string.gmatch(err, "([^\n]+)") do
-    rossi.print(line)
+  while true do
+    rossi.print("rossi: error")
+    computer.beep(349, 2)
+    for line in string.gmatch(err, "([^\n]+)") do
+      rossi.print(line)
+      rossi.sleep(0.5)
+    end
   end
 end
 rossi.print("rossi: exited")
+
 rossi.halt()
