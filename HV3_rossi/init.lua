@@ -1,14 +1,28 @@
--- ROSSI v0.1
+-- ROSSI v0.2
 local appFn = nil
 rossi = {}
 do
+  -- Early logging implementation, replaced later
+  local printbuf = {}
+  rossi.print = function(str)
+    table.insert(rossi.printbuf, str)
+  end
+
   rossi.halt = function()
     while true do computer.pullSignal() end
+  end
+
+  rossi.sleep = function(s)
+    local timeout = computer.uptime() + s
+    while computer.uptime() < timeout do
+      computer.pullSignal(timeout - computer.uptime())
+    end
   end
 
   -- Search for GPU and screen, if used
   local gpu = component.list("gpu", true)()
   local screen = component.list("screen", true)()
+  local console_print
   if gpu ~= nil and screen ~= nil then
     rossi.hasConsole = true
     -- the default lua bios actually does this binding already, but do it again just in case
@@ -16,7 +30,7 @@ do
     rossi.gpu = gpuProx
     rossi.screen = component.proxy(screen)
     gpuProx.bind(screen)
-    rossi.print = function(str)
+    rossi.console_print = function(str)
       local w, h = gpuProx.getResolution()
       for i=1,string.len(str),w do
         gpuProx.copy(1, 2, w, h - 1, 0, -1)
@@ -27,22 +41,30 @@ do
     rossi.print("rossi: gpu found")
   else
     rossi.hasConsole = false
-    rossi.print = function(str) end
+    rossi.console_print = function(str) end
   end
 
-  -- Load app.lua
-  bootAddr = computer.getBootAddress()
-  rossi.print("rossi: boot from " .. bootAddr)
-  local bootdisk = component.proxy(bootAddr)
+  -- Mount bootdisk
+  local bootAddr = computer.getBootAddress()
+  rossi.print("rossi: bootdisk at " .. bootAddr)
+  rossi.bootdisk = component.proxy(bootAddr)
+  if rossi.bootdisk.type ~= "filesystem" then
+    -- errors must be printed to console as real logger isn't up yet
+    rossi.console_print("rossi: not a filesystem")
+    rossi.halt()
+  end
+  if rossi.bootdisk.isReadonly() then
+    rossi.print("rossi: warn: filesystem is read-only, logging to disk is disabled")
+  end
 
   rossi.readfile = function(path)
-    local fp = bootdisk.open(path, "r")
+    local fp = rossi.bootdisk.open(path, "r")
     local buffer = ""
     repeat
-      local data = bootdisk.read(fp, 128000)
+      local data = rossi.bootdisk.read(fp, 128000)
       buffer = buffer .. (data or "")
     until not data
-    bootdisk.close(fp)
+    rossi.bootdisk.close(fp)
     return buffer
   end
 
@@ -50,17 +72,27 @@ do
     return load(rossi.readfile(path), "=" .. path, "t", _G)
   end
 
-  rossi.sleep = function(s)
-    local timeout = computer.uptime() + s
-    while computer.uptime() < timeout do
-      computer.pullSignal(timeout - computer.uptime())
+  -- Switch to real logger
+  local logFp = nil
+  if not rossi.bootdisk.isReadOnly() then
+    local time = os.time()
+    local worldTicks = (time * 1000 / 60 / 60) - 6000
+    local day = worldTicks / 24000
+    local tick = worldTicks % 24000
+    rossi.bootdisk.makeDirectory("log/")
+    logFp = rossi.bootdisk.open("log/rossi-" .. day .. "-" .. tick .. ".log", "w")
+  end
+  rossi.print = function(str)
+    console_print(str)
+    if logFp then
+      rossi.bootdisk.write(logFp, str .. "\n")
     end
   end
-
-  if bootdisk.type ~= "filesystem" then
-    rossi.print("rossi: not a filesystem")
-    rossi.halt()
+  for _, str in ipairs(printbuf) do
+    rossi.print(str)
   end
+
+  -- Load app.lua
   appFn, err = rossi.loadfile("app.lua")
   if appFn == nil then
     rossi.print("rossi: error loading:")
@@ -68,15 +100,19 @@ do
     rossi.halt()
   end
 end
+
 local _, err = xpcall(appFn, debug.traceback)
 if err then
+  pfn = rossi.print
   while true do
-    rossi.print("rossi: error")
+    pfn("rossi: error")
+    rossi.sleep(0.5)
     computer.beep(349, 2)
     for line in string.gmatch(err, "([^\n]+)") do
-      rossi.print(line)
+      pfn(line)
       rossi.sleep(0.5)
     end
+    pfn = rossi.console_print
   end
 end
 rossi.print("rossi: exited")

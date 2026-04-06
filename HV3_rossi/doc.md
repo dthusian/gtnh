@@ -1,17 +1,16 @@
 # Docs
 
-## `rossi.hasConsole: boolean`
+## Logging
+- `rossi.hasConsole: boolean` True if a GPU and screen were detected.
+- `rossi.print(msg: string)` Prints a message to the log file, and to the screen, if it exists.
+- `rossi.console_print(msg: string)` Prints a message only to the screen, if it exists.
 
-True if a GPU and screen were detected.
+## Bootdisk Access
+- `rossi.bootdisk: Filesystem` Filesystem component
+- `rossi.readfile(path: string): string` Reads the entire contents of a file.
+- `rossi.loadfile(path: string): function` Loads the contents of a file as a lua chunk.
 
-## `rossi.gpu: GPU | nil`
-
-If `rossi.hasConsole` is true, this is the GPU. Nil otherwise.
-
-## `rossi.screen: Screen | nil`
-
-If `rossi.hasConsole` is true, this is the screen. Nil otherwise.
-
-## `rossi.print(msg: string)`
-
-Prints a message to the screen if it exists.
+## Misc
+- `rossi.sleep(sec: number)` Idles for the specified amount of time.
+- `rossi.halt()` Stops the machine. This does not shutdown the machine,
+  and can be used for reporting errors on screne.
