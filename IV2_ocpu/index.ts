@@ -1,100 +1,13 @@
-import { createServer, Socket } from "net";
+import { createServer } from "net";
+import { OCSocket } from "./ocsocket";
+import { MachineConfig } from "./ machine";
 
-type RawPacket = {
-  opcode: number,
-  seq: number,
-  data: Buffer
-};
-
-class OCSocket {
-  seq: number = 1;
-  socket: Socket;
-  buf: Buffer = Buffer.alloc(0);
-  currResolve: (() => void) | null = null;
-  currReject: ((err: Error | undefined) => void) | null = null;
-
-  constructor(socket: Socket) {
-    this.socket = socket;
-    socket.on("data", data => {
-      let newData = typeof data === "string" ? Buffer.from(data, "utf-8") : data;
-      this.buf = Buffer.concat([this.buf, newData]);
-      if(this.currResolve) this.currResolve();
-    });
-    socket.on("close", data => {
-      if(this.currReject) this.currReject(new Error("The socket was closed"));
-    });
-    socket.on("error", err => {
-      if(this.currReject) this.currReject(err);
-    });
+const config: MachineConfig[] = [
+  {
+    machineType: "lcr",
+    
   }
-
-  private readExact(n: number): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      if(this.currResolve || this.currReject) reject("Another thread is already using this socket");
-      this.currReject = (err) => {
-        this.currReject = null;
-        this.currResolve = null;
-        reject(err);
-      };
-      this.currResolve = () => {
-        if(this.buf.length >= n) {
-          this.currReject = null;
-          this.currResolve = null;
-          const chunk = this.buf.subarray(0, n);
-          this.buf = this.buf.subarray(n);
-          resolve(chunk);
-        }
-      };
-    });
-  }
-
-  private async readPacket(): Promise<RawPacket> {
-    const lengthBuf = await this.readExact(2);
-    const length = lengthBuf.readUint16LE(0);
-    const packetBuf = await this.readExact(length);
-    const opcode = packetBuf.readUint16LE(0);
-    const seq = packetBuf.readUint16LE(2);
-    return {
-      opcode: opcode,
-      seq: seq,
-      data: packetBuf.subarray(4)
-    };
-  }
-
-  private writePacket(packet: RawPacket) {
-    const buf = Buffer.alloc(2 + 4 + packet.data.length);
-    buf.writeUint16LE(4 + packet.data.length, 0);
-    buf.writeUint16LE(packet.opcode, 2);
-    buf.writeUint16LE(packet.seq, 4);
-    packet.data.copy(buf, 6);
-    this.socket.write(buf);
-  }
-
-  async executeLua(lua: string): Promise<string> {
-    const seq = this.seq++;
-    // send lua
-    const luaUtf8 = Buffer.from(lua, "utf-8");
-    const dataBuf = Buffer.alloc(luaUtf8.length + 2);
-    dataBuf.writeUint16LE(luaUtf8.length);
-    luaUtf8.copy(dataBuf, 2);
-    this.writePacket({
-      opcode: 1,
-      seq: seq,
-      data: dataBuf
-    });
-    // wait for in-progress
-    const resp1 = await this.readPacket();
-    if(resp1.opcode !== 2 || resp1.seq !== seq) throw new Error("Protocol error");
-    // wait for 2nd in-progress
-    const resp2 = await this.readPacket();
-    if((resp2.opcode !== 3 && resp2.opcode !== 4) || resp2.seq !== seq) throw new Error("Protocol error");
-    // read body
-    const len = resp2.data.readUint16LE(0);
-    const res = resp2.data.subarray(2, 2 + len);
-    if(res.length !== len) throw new Error("Unexpected end of packet");
-    return res.toString("utf-8");
-  }
-}
+]
 
 createServer(async socket => {
   try {
