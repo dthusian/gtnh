@@ -6,6 +6,12 @@ type RawPacket = {
   data: Buffer
 };
 
+export class LuaError extends Error {
+  constructor(msg: string) {
+    super(msg);
+  }
+}
+
 export class OCSocket {
   seq: number = 1;
   socket: Socket;
@@ -92,6 +98,8 @@ export class OCSocket {
     const len = resp2.data.readUint16LE(0);
     const res = resp2.data.subarray(2, 2 + len);
     if(res.length !== len) throw new Error("Unexpected end of packet");
-    return res.toString("utf-8");
+    const resStr = res.toString("utf-8");
+    if(resp2.opcode === 3) throw new LuaError(resStr);
+    return resStr;
   }
 }
