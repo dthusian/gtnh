@@ -14,6 +14,7 @@ rossi.sleep = function(s)
 end
 
 rossi.print("rcestub v0.0.1")
+local component = require("component")
 local inetAddr, _ = component.list("internet", true)()
 if inetAddr == nil then 
   rossi.print("no internet card found")

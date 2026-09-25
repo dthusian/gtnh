@@ -42,11 +42,17 @@ export class RecipeScheduler {
 
       // filter recipes for everything we want to make
       const wantToMake = this.recipes.map(v => {
-        const fluidReq = v.fluidOutputs.map((v2, i) => Math.ceil(((v.maintainFluids[i] || 0) - v2.amount) / v2.amount));
-        const itemReq = v.itemOutputs.map((v2, i) => Math.ceil(((v.maintainItems[i] || 0) - v2.amount) / v2.amount));
+        const fluidReq = v.fluidOutputs.map((v2, i) => Math.ceil(((v.maintainFluids[i] || 0) - (fluidMap[v2.id] || 0)) / v2.amount));
+        const itemReq = v.itemOutputs.map((v2, i) => Math.ceil(((v.maintainItems[i] || 0) - (itemMap[v2.id + "/" + v2.meta] || 0)) / v2.amount));
         const fluidLimits = v.fluidInputs.map(v2 => Math.floor(64000 / v2.amount)); // TODO not hardcoded fluid limit?
-        const itemLimits = v.itemInputs.map(v2 => Math.floor(64 / v2.amount));
-        const totalLimit = fluidLimits.concat(itemLimits).reduce((a, b) => Math.min(a, b));
+        const itemLimits = v.itemInputs.filter(v2 => !v2.nc).map(v2 => Math.floor(64 / v2.amount));
+        const fluidIngredientLimits = v.fluidInputs.map(v2 => Math.floor((fluidMap[v2.id] || 0) / v2.amount));
+        const itemIngredientLimits = v.itemInputs.filter(v2 => !v2.nc).map(v2 => Math.floor((itemMap[v2.id + "/" + v2.meta] || 0) / v2.amount));
+        const totalLimit = fluidLimits
+          .concat(itemLimits)
+          .concat(fluidIngredientLimits)
+          .concat(itemIngredientLimits)
+          .reduce((a, b) => Math.min(a, b));
         const totalReq = fluidReq.concat(itemReq).reduce((a, b) => Math.max(a, b));
         return [v, Math.min(totalLimit, totalReq)] as [Recipe, number];
       }).filter(v => v[1] > 0);

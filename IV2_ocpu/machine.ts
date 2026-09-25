@@ -36,16 +36,27 @@ export class MachineState {
   }
 
   async resetMachine(): Promise<void> {
+    console.log(`${this.config.name}: reset`);
     if(!this.socket) return
     const i = this.config.itemInput;
     const f = this.config.fluidInput;
     await this.socket.executeLua(`
 local component = require("component")
 local itemTp = component.proxy("${i.tpUuid}")
+local itemInt = component.proxy("${i.intUuid}")
 local fluidTp = component.proxy("${f.tpUuid}")
+local fluidInt = component.proxy("${f.intUuid}")
 local invSize = itemTp.getInventorySize(${i.machineSide})
+for i=0,8,1 do
+  itemInt.setInterfaceConfiguration(i)
+end
+for i=0,4,1 do
+  fluidInt.setFluidInterfaceConfiguration(i)
+end
 for i=1,invSize,1 do
-  itemTp.transferItem(${i.machineSide}, ${i.intSide}, 64, i, 1)
+  intSlot = 0
+  if i > 9 then intSlot = i - 9 else intSlot = i end
+  itemTp.transferItem(${i.machineSide}, ${i.intSide}, 64, i, intSlot)
 end
 for i=1,${this.config.maxFluidSlots},1 do
   fluidTp.transferFluid(${f.machineSide}, ${f.intSide}, ${this.config.maxFluidCapacity})
@@ -99,6 +110,7 @@ local done = true
   }
 
   async executeRecipe(recipe: Recipe, multiplier: number): Promise<void> {
+    console.log(`${this.config.name}: exec ${recipe.name} x ${multiplier}`);
     if(!this.socket) throw new Error("No socket connected");
     if(this.currentRecipe) throw new Error("Machine is already executing a recipe");
     if(recipe.fluidInputs.length > this.config.maxFluidSlots) throw new Error("Machine cannot support that many fluid ingredients");
@@ -139,7 +151,11 @@ itemTp.transferItem(${i.intSide}, ${i.machineSide}, ${count}, ${idx + 1}, ${idx 
       const count = v.amount * multiplier;
       if(count > this.config.maxFluidCapacity) throw new Error("Fluid stack too large");
       luaStr += `
-fluidTp.transferFluid(${f.intSide}, ${f.machineSide}, ${count}, ${idx})
+local f = 0
+while f < ${count} do
+  ok, transferred = fluidTp.transferFluid(${f.intSide}, ${f.machineSide}, ${count} - f, ${idx})
+  f = f + transferred
+end
 `;
     });
     recipe.itemInputs.forEach((v, idx) => {
@@ -152,11 +168,41 @@ fluidTp.transferFluid(${f.intSide}, ${f.machineSide}, ${count}, ${idx})
   }
 
   async meGetItems(): Promise<ItemStack[]> {
-    throw new Error("todo");
+    if(!this.socket) throw new Error("Not connected");
+    const resp = await this.socket.executeLua(String.raw`
+local component = require("component")
+local itemInt = component.proxy("${this.config.itemInput.intUuid}")
+local resp = {}
+for i in itemInt.allItems() do
+  table.insert(resp, i.name .. "/" .. i.damage .. "/" .. i.size .. "\n")
+end
+return table.concat(resp)
+`);
+    return resp.split("\n").filter(v => v).map(v => {
+      const spl = v.split("/");
+      if(spl.length != 3) throw new Error("Malformed response from lua");
+      if(!spl[0] || !spl[1] || !spl[2]) throw new Error("Unreachable");
+      return { id: spl[0], meta: parseInt(spl[1]), amount: parseInt(spl[2]), nc: false }
+    });
   }
 
   async meGetFluids(): Promise<FluidStack[]> {
-    throw new Error("todo");
+    if(!this.socket) throw new Error("Not connected");
+    const resp = await this.socket.executeLua(String.raw`
+local component = require("component")
+local fluidInt = component.proxy("${this.config.fluidInput.intUuid}")
+local resp = {}
+for k, v in ipairs(fluidInt.getFluidsInNetwork()) do
+  table.insert(resp, v.name .. "/" .. v.amount .. "\n")
+end
+return table.concat(resp)
+`);
+    return resp.split("\n").filter(v => v).map(v => {
+      const spl = v.split("/");
+      if(spl.length != 2) throw new Error("Malformed response from lua");
+      if(!spl[0] || !spl[1]) throw new Error("Unreachable");
+      return { id: spl[0], amount: parseInt(spl[1]) }
+    });
   }
 }
 

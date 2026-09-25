@@ -79,7 +79,7 @@ async function main() {
     try {
       console.log("got connection: " + socket.remoteAddress);
       const ocSocket = new OCSocket(socket);
-      machineManager.addSocket(ocSocket);
+      socketQueue.push(ocSocket);
     } catch(e: unknown) {
       console.log(e);
     }
@@ -90,38 +90,12 @@ async function main() {
     socketQueue = [];
     await Promise.all(socketQueueCopy.map(v => machineManager.addSocket(v)));
     status = await recipeScheduler.poll();
+    /*console.log("=== Status ===");
+    status.machines.forEach(v => {
+      console.log(`${v.machineName} (${v.connected ? "Connected" : "Disconnected"}): ${v.machineRecipe ? v.machineRecipe : "idle"}`);
+    })*/
     await sleep(2000);
   }
 }
 
-async function machineTest() {
-  createServer(async socket => {
-    try {
-      console.log("got connection: " + socket.remoteAddress);
-      const ocSocket = new OCSocket(socket);
-      console.log("resetting...");
-      await machineManager.addSocket(ocSocket);
-      console.log("done resetting");
-
-      const state = machineManager.states[0];
-      if(!state) throw new Error("bruh1");
-      const recipe = recipes[0];
-      if(!recipe) throw new Error("bruh2");
-      
-      await sleep(5000);
-      console.log("executing recipe...");
-      await state.executeRecipe(recipe, 1);
-      console.log("polling...");
-      while(true) {
-        const status = await state.poll();
-        console.log("poll: " + status);
-        await sleep(1000);
-        if(status) break;
-      }
-    } catch(e: unknown) {
-      console.log(e);
-    }
-  }).listen(18320);
-}
-
-machineTest();
+main();
