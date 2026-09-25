@@ -44,19 +44,21 @@ local component = require("component")
 local itemTp = component.proxy("${i.tpUuid}")
 local fluidTp = component.proxy("${f.tpUuid}")
 local invSize = itemTp.getInventorySize(${i.machineSide})
-for i=0,invSize-1,1 do
-  itemTp.transferItem(${i.machineSide}, ${i.intSide}, 64, i, 0);
-  -- todo: see if wait is needed
-done
-for i=0,${this.config.maxFluidSlots-1},1 do
+for i=1,invSize,1 do
+  itemTp.transferItem(${i.machineSide}, ${i.intSide}, 64, i, 1)
+end
+for i=1,${this.config.maxFluidSlots},1 do
   fluidTp.transferFluid(${f.machineSide}, ${f.intSide}, ${this.config.maxFluidCapacity})
-done`);
+end
+`);
+    this.currentRecipe = null;
     // TODO: check the machine was successfully emptied
   }
 
   /// Adds or replaces existing socket
   async onAddSocket(socket: OCSocket) {
     this.socket = socket;
+    await this.socket.executeLua(`print("socket connected")`)
     await this.resetMachine();
   }
 
@@ -71,23 +73,21 @@ done`);
 local component = require("component")
 local itemTp = component.proxy("${i.tpUuid}")
 local fluidTp = component.proxy("${f.tpUuid}")
-local done = `;
+local done = true
+`;
+      luaStr += "\n";
       luaStr += this.currentRecipe.itemInputs
         .map((v, i) => v.nc ? null : i)
-        .filter(v => v !== null)
-        .map(v => `itemTp.getStackInSlot(${i.machineSide}, ${v}) == nil`)
-        .join(" and ");
-      luaStr += " and ";
+        .filter((v => v !== null) as (x: number | null) => x is number)
+        .map(v => `done = done and itemTp.getStackInSlot(${i.machineSide}, ${v + 1}) == nil\n`)
+        .join("");
       luaStr += this.currentRecipe.fluidInputs
-        .map(v => `fluidTp.getFluidInTank(${f.machineSide}) == nil`)
-        .join(" and ");
-      luaStr += "\nif done then\n";
-      luaStr += this.currentRecipe.itemInputs
-        .map((v, i) => v.nc ? i : null)
-        .filter(v => v !== null)
-        .map(v => `itemTp.transferItem(${i.machineSide}, ${i.intSide}, 64, ${v}, )`);
+        .map((v, i) => `done = done and fluidTp.getFluidInTank(${f.machineSide}, ${i + 1}).amount == 0\n`)
+        .join("");
+      luaStr += "\nreturn done\n";
       const resp = await this.socket.executeLua(luaStr);
       if(resp === "true") {
+        await this.resetMachine();
         this.currentRecipe = null;
         return true;
       } else {
@@ -98,11 +98,57 @@ local done = `;
     }
   }
 
-  async executeRecipe(): Promise<void> {
-    if(this.currentRecipe) {
-      throw new Error("Machine is already executing a recipe");
-    }
-    throw new Error("todo");
+  async executeRecipe(recipe: Recipe, multiplier: number): Promise<void> {
+    if(!this.socket) throw new Error("No socket connected");
+    if(this.currentRecipe) throw new Error("Machine is already executing a recipe");
+    if(recipe.fluidInputs.length > this.config.maxFluidSlots) throw new Error("Machine cannot support that many fluid ingredients");
+
+    this.currentRecipe = recipe;
+    multiplier = Math.floor(multiplier);
+    const i = this.config.itemInput;
+    const f = this.config.fluidInput;
+    let luaStr = `
+local component = require("component")
+local itemTp = component.proxy("${i.tpUuid}")
+local itemInt = component.proxy("${i.intUuid}")
+local fluidTp = component.proxy("${f.tpUuid}")
+local fluidInt = component.proxy("${f.intUuid}")
+local chk = function(ok, msg) if not ok then error(msg) end end
+local db = component.getPrimary("database")
+`;
+    recipe.itemInputs.forEach((v, idx) => {
+      luaStr += `
+db.set(1, "${v.id}", ${v.meta})
+itemInt.setInterfaceConfiguration(${idx}, db.address, 1, 64)
+`;
+    });
+    recipe.fluidInputs.forEach((v, idx) => {
+      luaStr += `
+fluidInt.setFluidInterfaceConfiguration(${idx}, { name = "${v.id}", amount = 16000 })
+`;
+    });
+    luaStr += "os.sleep(0.5)\n";
+    recipe.itemInputs.forEach((v, idx) => {
+      const count = v.amount * multiplier;
+      if(count > 64) throw new Error("Item stack too large");
+      luaStr += `
+itemTp.transferItem(${i.intSide}, ${i.machineSide}, ${count}, ${idx + 1}, ${idx + 1})
+`;
+    });
+    recipe.fluidInputs.forEach((v, idx) => {
+      const count = v.amount * multiplier;
+      if(count > this.config.maxFluidCapacity) throw new Error("Fluid stack too large");
+      luaStr += `
+fluidTp.transferFluid(${f.intSide}, ${f.machineSide}, ${count}, ${idx})
+`;
+    });
+    recipe.itemInputs.forEach((v, idx) => {
+      luaStr += `itemInt.setInterfaceConfiguration(${idx}, db.address, 2, 64)\n`;
+    });
+    recipe.fluidInputs.forEach((v, idx) => {
+      luaStr += `fluidInt.setFluidInterfaceConfiguration(${idx})\n`;
+    });
+    await this.socket.executeLua(luaStr);
   }
 
   async meGetItems(): Promise<ItemStack[]> {
