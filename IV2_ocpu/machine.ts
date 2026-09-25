@@ -1,6 +1,11 @@
 import { OCSocket } from "./ocsocket";
 import { FluidStack, ItemStack, Recipe } from "./recipe";
 
+function formatDate() {
+  const d = new Date();
+  return `${("00"+d.getHours()).slice(-2)}:${("00"+d.getMinutes()).slice(-2)}:${("00"+d.getSeconds()).slice(-2)}`;
+}
+
 export enum MachineSide {
   Bottom = 0,
   Top = 1,
@@ -36,7 +41,7 @@ export class MachineState {
   }
 
   async resetMachine(): Promise<void> {
-    console.log(`${this.config.name}: reset`);
+    console.log(`[${formatDate()}] ${this.config.name}: reset`);
     if(!this.socket) return
     const i = this.config.itemInput;
     const f = this.config.fluidInput;
@@ -110,7 +115,7 @@ local done = true
   }
 
   async executeRecipe(recipe: Recipe, multiplier: number): Promise<void> {
-    console.log(`${this.config.name}: exec ${recipe.name} x ${multiplier}`);
+    console.log(`[${formatDate()}] ${this.config.name}: exec ${recipe.name} x ${multiplier}`);
     if(!this.socket) throw new Error("No socket connected");
     if(this.currentRecipe) throw new Error("Machine is already executing a recipe");
     if(recipe.fluidInputs.length > this.config.maxFluidSlots) throw new Error("Machine cannot support that many fluid ingredients");
@@ -141,7 +146,7 @@ fluidInt.setFluidInterfaceConfiguration(${idx}, { name = "${v.id}", amount = 160
     });
     luaStr += "os.sleep(0.5)\n";
     recipe.itemInputs.forEach((v, idx) => {
-      const count = v.amount * multiplier;
+      const count = v.nc ? v.amount : v.amount * multiplier;
       if(count > 64) throw new Error("Item stack too large");
       luaStr += `
 itemTp.transferItem(${i.intSide}, ${i.machineSide}, ${count}, ${idx + 1}, ${idx + 1})
@@ -234,7 +239,9 @@ return r
       transposerList.includes(v.config.fluidInput.tpUuid) &&
       interfaceList.includes(v.config.itemInput.intUuid) &&
       interfaceList.includes(v.config.fluidInput.intUuid));
-    await Promise.all(eligibleMachines.map(v => v.onAddSocket(socket)));
+    for(const machine of eligibleMachines) {
+      await machine.onAddSocket(socket);
+    }
   }
 
   machines(): MachineState[] {

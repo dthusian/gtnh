@@ -1,5 +1,5 @@
 import { MachineManager } from "./machine";
-import { ItemStack, Recipe } from "./recipe";
+import { Recipe, RecipeInput } from "./recipe";
 
 export type MachineStatusReport = {
   machineName: string,
@@ -15,9 +15,24 @@ export class RecipeScheduler {
   machineManager: MachineManager;
   recipes: Recipe[];
 
-  constructor(machineManager: MachineManager, recipes: Recipe[]) {
+  constructor(machineManager: MachineManager, recipes: RecipeInput[]) {
     this.machineManager = machineManager;
-    this.recipes = recipes;
+    this.recipes = recipes.map(v => {
+      const maintainFluids = v.maintainFluids || [];
+      const maintainItems = v.maintainItems || [];
+      while(maintainFluids.length < v.fluidOutputs.length) maintainFluids.push(0);
+      while(maintainItems.length < v.itemOutputs.length) maintainItems.push(0);
+      return {
+        name: v.name,
+        machineType: v.machineType,
+        itemInputs: v.itemInputs,
+        fluidInputs: v.fluidInputs,
+        itemOutputs: v.itemOutputs,
+        fluidOutputs: v.fluidOutputs,
+        maintainFluids: maintainFluids,
+        maintainItems: maintainItems
+      };
+    });
   }
 
   async poll(): Promise<StatusReport> {

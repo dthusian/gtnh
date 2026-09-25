@@ -7,8 +7,19 @@ export type FluidStack = {
 export type ItemStack = {
   id: string,
   meta: number,
-  nc: boolean,
+  nc?: boolean,
   amount: number
+};
+
+export type RecipeInput = {
+  name: string,
+  machineType: string,
+  itemInputs: ItemStack[],
+  fluidInputs: FluidStack[],
+  itemOutputs: ItemStack[],
+  fluidOutputs: FluidStack[],
+  maintainItems?: number[],
+  maintainFluids?: number[]
 };
 
 export type Recipe = {
