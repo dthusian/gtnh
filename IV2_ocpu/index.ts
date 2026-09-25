@@ -96,6 +96,40 @@ const recipes: RecipeInput[] = [
     ],
     maintainFluids: [32000]
   },
+  {
+    name: "Ammonia",
+    machineType: "lcr",
+    itemInputs: [
+      { id: "gregtech:gt.integrated_circuit", meta: 1, amount: 1, nc: true }
+    ],
+    fluidInputs: [
+      { id: "hydrogen", amount: 3000 },
+      { id: "nitrogen", amount: 1000 }
+    ],
+    fluidOutputs: [
+      { id: "ammonia", amount: 1000 }
+    ],
+    itemOutputs: [],
+    maintainFluids: [32000],
+    maintainItems: []
+  },
+  {
+    name: "Ammonium Chloride",
+    machineType: "lcr",
+    itemInputs: [
+      { id: "gregtech:gt.integrated_circuit", meta: 1, amount: 1, nc: true }
+    ],
+    fluidInputs: [
+      { id: "ammonia", amount: 1000 },
+      { id: "hydrochloricacid_gt5u", amount: 1000 }
+    ],
+    fluidOutputs: [
+      { id: "ammonium chloride", amount: 1000 }
+    ],
+    itemOutputs: [],
+    maintainFluids: [32000],
+    maintainItems: []
+  },
   // Pt
   {
     name: "Platinum Concentrate",
@@ -123,7 +157,8 @@ const recipes: RecipeInput[] = [
       { id: "gregtech:gt.integrated_circuit", meta: 3, amount: 1, nc: true }
     ],
     fluidInputs: [
-      { id: "platinum concentrate", amount: 36000 }
+      { id: "platinum concentrate", amount: 36000 },
+      { id: "ammonium chloride", amount: 3600 }
     ],
     itemOutputs: [
       { id: "bartworks:gt.bwMetaGenerateddust", meta: 45, amount: 16 },
